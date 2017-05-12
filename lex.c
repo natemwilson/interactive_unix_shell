@@ -3,6 +3,7 @@
 /* Author: Nate Wilson                                                */
 /*--------------------------------------------------------------------*/
 
+#include "lex.h"
 #include "ish.h"
 #include "dynarray.h"
 #include <ctype.h>
@@ -10,24 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-
-
-/* A Token object can be either special or ordinary. */
-enum TokenType {TOKEN_ORDINARY, TOKEN_SPECIAL};
-
-/*--------------------------------------------------------------------*/
-
-/* A Token is either special or ordinary, and is expressed as a string. */
-
-struct Token
-{
-   /* The type of the token. */
-   enum TokenType eType;
-
-   /* The string which is the token's value. */
-   char *pcValue;
-};
-
 
 /* Write all tokens in oTokens in logical order to stdout.  */
 void lex_writeTokens(DynArray_T oTokens)
