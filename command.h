@@ -19,6 +19,14 @@ void Command_writeCommand(Command_T oCommand);
 /* return the token array in a command*/
 DynArray_T Command_getTokens(Command_T oCommand);
 
+/* return a string name representing the command input redirection. 
+   return null if stdin  */
+char *Command_getStdin(Command_T oCommand);
+
+/* return a string name representing the command output redirection. 
+   return null if stdout  */
+char *Command_getStdout(Command_T oCommand);
+
 /* take a dynarray and create the return a command */
 Command_T Command_createCommand(DynArray_T oTokens);
 

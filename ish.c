@@ -3,6 +3,7 @@
 /* Author: Nate Wilson                                                */
 /*--------------------------------------------------------------------*/
 
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -134,6 +135,54 @@ static int ish_isBuiltIn(Command_T oCommand)
       return TRUE;
    else
       return FALSE;
+}
+
+void ish_handleRedirection(Command_T oCommand)
+{
+   char *pcStdin;
+   char *pcStdout;
+   int iFd;
+   int iRet;
+   
+   pcStdin = Command_getStdin(oCommand);
+   pcStdout = Command_getStdout(oCommand);
+
+   /* handle stdout first */
+   
+
+   /* The permissions of the newly-created file. */
+   if (pcStdout != NULL)
+   {
+      enum {PERMISSIONS = 0600};
+      
+      iFd = creat(pcStdout, PERMISSIONS);
+      if (iFd == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+      
+      iRet = close(1);
+      if (iRet == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+      
+      iRet = dup(iFd);
+      if (iRet == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+
+      iRet = close(iFd);
+      if (iRet == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+   }
+   if (pcStdin != NULL)
+   {
+      iFd = open(pcStdin, O_RDONLY);
+      if (iFd == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+
+      iRet = close(0);
+      if (iRet == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+
+      iRet = dup(iFd);
+      if (iRet == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+
+      iRet = close(iFd);
+      if (iRet == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+      
+   }
+       
 }
 
 static void ish_handleBuiltIn(Command_T oCommand, char *pcLine)
@@ -280,13 +329,13 @@ int main(int argc, char *argv[])
                ish_handleBuiltIn(oCommand, pcLine);
             else /* if the command is NOT a builtin */
             {
-
-               /* handle redirection in future versions here */
-              
-               
                iPid = fork();
                if (iPid == 0)
                {
+                  /* handle redirection here */
+                  if ((Command_getStdin(oCommand) != NULL) ||
+                      (Command_getStdout(oCommand) != NULL))
+                     ish_handleRedirection(oCommand);
                   /* this causes a warning, you should do error checking \
                      below depending on exactly how to handle the other
                      errors above */

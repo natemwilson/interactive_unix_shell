@@ -19,6 +19,15 @@ struct Command
    char *pcStdout;
 };
 
+char *Command_getStdin(Command_T oCommand)
+{
+   return oCommand->pcStdin;
+}
+
+char *Command_getStdout(Command_T oCommand)
+{
+   return oCommand->pcStdout;
+}
 
 DynArray_T Command_getTokens(Command_T oCommand)
 {
