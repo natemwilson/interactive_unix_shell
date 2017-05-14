@@ -39,6 +39,7 @@ static char **ish_allocateAndFillArgvArray(char *apcArgv[], Command_T oCommand)
    if (apcArgv == NULL)
    {
       /* error check!! */
+      
    }
    for (uIndex = 0; uIndex < uLength; uIndex++)
    {
@@ -234,7 +235,8 @@ static void ish_handleBuiltIn(Command_T oCommand, char *pcLine)
       {
          psCmdArg1 = DynArray_get(oTokens, 1);
          psCmdArg2 = DynArray_get(oTokens, 2);
-         setenv(psCmdArg1->pcValue, psCmdArg2->pcValue, TRUE);
+         setenv(psCmdArg1->pcValue,
+                psCmdArg2->pcValue, TRUE);
          return;
       }
       if (uLength == 2) /* % setenv a -- default sets to empty string */
@@ -306,7 +308,7 @@ int main(int argc, char *argv[])
    int iRet;
    Command_T oCommand;
    pid_t iPid;
-   char **apcArgv;
+   char **apcArgv = NULL;
 
    pcPgmName = argv[0];
    printf("%% ");
@@ -329,6 +331,8 @@ int main(int argc, char *argv[])
                ish_handleBuiltIn(oCommand, pcLine);
             else /* if the command is NOT a builtin */
             {
+               apcArgv = ish_allocateAndFillArgvArray(apcArgv,
+                                                      oCommand);
                iPid = fork();
                if (iPid == 0)
                {
@@ -339,16 +343,16 @@ int main(int argc, char *argv[])
                   /* this causes a warning, you should do error checking \
                      below depending on exactly how to handle the other
                      errors above */
-                  apcArgv = ish_allocateAndFillArgvArray(apcArgv,
-                                                         oCommand);
+
                   execvp(apcArgv[0], apcArgv);
-                  perror(apcArgv[0]);
-                  /* free the argv array here */
-                  ish_freeArgvArray(apcArgv);
+                  perror(pcPgmName);
+
                   exit(EXIT_FAILURE);
                }
                iPid = wait(NULL);
                if (iPid == -1) {perror(argv[0]); exit(EXIT_FAILURE); }
+               /* free the argv array here */
+               ish_freeArgvArray(apcArgv);
             }
             /* free commad struct and internals */
             Command_freeCommand(oCommand);

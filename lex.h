@@ -31,7 +31,7 @@ void lex_writeTokens(DynArray_T oTokens);
 /* Free all of the tokens in oTokens. */
 void lex_freeTokens(DynArray_T oTokens);
 
-/* perform lexical analysis on a string line, returning a token array*/
+/* perform lexical analysis on a string pcLine, returns a token array*/
 DynArray_T lex_lexLine(const char *pcLine);
 
 #endif

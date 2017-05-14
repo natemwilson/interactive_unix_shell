@@ -20,6 +20,7 @@ const char *getPgmName()
    return pcPgmName;
 }
 
+/* read in a line from psFile, then return that line in string form */
 static char *readLine(FILE *psFile)
 {
    enum {INITIAL_LINE_LENGTH = 2};
@@ -72,6 +73,9 @@ static char *readLine(FILE *psFile)
    return pcLine;
 }
 
+/* implements the syntactic analyzer, returns 0 on success
+   argv array is a string array of command line args
+   argc is the count of arguments in argv array */
 int main(int argc, char *argv[])
 {
    char *pcLine;
