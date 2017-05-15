@@ -7,6 +7,6 @@
 #define ISH_INCLUDED
 
 /* returns the name of the program */
-char *getPgmName();
+const char *getPgmName(void);
 
 #endif

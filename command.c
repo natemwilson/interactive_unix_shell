@@ -110,17 +110,16 @@ Command_T Command_createCommand(DynArray_T oTokens)
    struct Token *psNextToken; /* another token pointer */
    Command_T oCommand; /* command to create and return*/
    char *pcStdinReferenceString  = "<"; /* used for string comparing */
-   char *pcPgmName; /* the program name */
+   const char *pcPgmName; /* the program name */
    
    assert(oTokens != NULL);
 
+   pcPgmName = getPgmName();
+   
    /* account for the empty cmd case, silently fail */
    uLength = DynArray_getLength(oTokens);
    if (uLength == 0) return NULL;
    
-   /*assert(uLength > 0);  */
-   pcPgmName = getPgmName();
-      
    /*  It is an error for the DynArray object to begin with a 
        special  token. */
    psToken = DynArray_get(oTokens, 0);
@@ -149,17 +148,12 @@ Command_T Command_createCommand(DynArray_T oTokens)
          return NULL;
       }  
    }
-      
+
+   /* past initial error checking, now build the command */
    /* allocate command struct, set address to oCommand*/
    oCommand = (struct Command*)malloc(sizeof(struct Command));
-   /* error check!!*/
    if (oCommand == NULL)
-   {
-      /* do i want to return null here and have my shell continue? 
-         or treat this as programmer error & exit with exit failure? */
-      fprintf(stderr, "insufficient memory\n");
-      return NULL;
-   }
+   {perror(pcPgmName); exit(EXIT_FAILURE);}
 
    /* set tokens array */
    oCommand->oTokens = oTokens;
@@ -172,19 +166,13 @@ Command_T Command_createCommand(DynArray_T oTokens)
    uStdoutTokenCount = 0;
    
    /* now check for only one std in and one stdout token */
-   for (uIndex = 0; uIndex < uLength; uIndex++)
-   {
+   for (uIndex = 0; uIndex < uLength; uIndex++) {
       psToken = DynArray_get(oCommand->oTokens, uIndex);
-      if (psToken->eType == TOKEN_SPECIAL)
-      {
+      if (psToken->eType == TOKEN_SPECIAL) {
          if (strcmp(psToken->pcValue, pcStdinReferenceString) == 0)
-         {
             uStdinTokenCount++;
-         }
          else
-         {
             uStdoutTokenCount++;
-         }
       }                
    }
    if (uStdinTokenCount > 1)
@@ -234,29 +222,32 @@ Command_T Command_createCommand(DynArray_T oTokens)
             oCommand->pcStdin =
                (char*)malloc(strlen(psNextToken->pcValue) + 1);
             if (oCommand->pcStdin == NULL) {
-               fprintf(stderr, "insufficient memory\n");
+               perror(pcPgmName);
                free(oCommand);
-               return NULL; /* should this exit(EXIT_FAILURE)? */  }
+               exit(EXIT_FAILURE);
+            }
             strcpy(oCommand->pcStdin, psNextToken->pcValue);
          }
-         else
+         else /*else it is stdout*/
          {
             oCommand->pcStdout =
                (char*)malloc(strlen(psNextToken->pcValue) + 1);
-            /* error check ! */
             if (oCommand->pcStdout == NULL) {
-               fprintf(stderr, "insufficient memory\n");
+               perror(pcPgmName);
                free(oCommand);
-               return NULL; /* should this exit(EXIT_FAILURE)? */ }
+               exit(EXIT_FAILURE);
+            }
             strcpy(oCommand->pcStdout, psNextToken->pcValue);
          }
-         DynArray_removeAt(oCommand->oTokens, uIndex);
-         DynArray_removeAt(oCommand->oTokens, uIndex);
-         /* should I do some token freeing here? */
+         /* remove the special token and the one following it */
+         (void) DynArray_removeAt(oCommand->oTokens, uIndex);
+         (void) DynArray_removeAt(oCommand->oTokens, uIndex);
+         /* free those tokens and their internals */
          free(psToken->pcValue);
          free(psToken);
          free(psNextToken->pcValue);
          free(psNextToken);
+         /* update loop parameters to reflect new structure */
          uLength = uLength - 2;
          uIndex = uIndex - 1;
       }

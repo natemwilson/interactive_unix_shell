@@ -12,7 +12,64 @@
 #include <string.h>
 #include <assert.h>
 
-/* Write all tokens in oTokens in logical order to stdout.  */
+
+/* read in a line from psFile, then return that line in string form */
+char *lex_readLine(FILE *psFile)
+{
+   enum {INITIAL_LINE_LENGTH = 2};
+   enum {GROWTH_FACTOR = 2};
+
+   size_t uLineLength = 0;
+   size_t uPhysLineLength = INITIAL_LINE_LENGTH;
+   char *pcLine;
+   int iChar;
+   const char *pcPgmName;
+   
+   assert(psFile != NULL);
+
+   pcPgmName = getPgmName();
+   
+   /* If no lines remain, return NULL. */
+   if (feof(psFile))
+      return NULL;
+   iChar = fgetc(psFile);
+   if (iChar == EOF)
+      return NULL;
+
+   /* Allocate memory for the string. */
+   pcLine = (char*)malloc(uPhysLineLength);
+   if (pcLine == NULL)
+   {perror(pcPgmName); exit(EXIT_FAILURE);}
+   /* Read characters into the string. */
+   while ((iChar != '\n') && (iChar != EOF))
+   {
+      if (uLineLength == uPhysLineLength)
+      {
+         uPhysLineLength *= GROWTH_FACTOR;
+         pcLine = (char*)realloc(pcLine, uPhysLineLength);
+         if (pcLine == NULL)
+         {perror(pcPgmName); exit(EXIT_FAILURE);}
+      }
+      pcLine[uLineLength] = (char)iChar;
+      uLineLength++;
+      iChar = fgetc(psFile);
+   }
+
+   /* Append a null character to the string. */
+   if (uLineLength == uPhysLineLength)
+   {
+      uPhysLineLength++;
+      pcLine = (char*)realloc(pcLine, uPhysLineLength);
+      if (pcLine == NULL)
+      {perror(pcPgmName); exit(EXIT_FAILURE);}
+   }
+   pcLine[uLineLength] = '\0';
+
+   return pcLine;
+}
+
+/* Write all tokens in oTokens to stdout in same sequence they 
+   came in and according to spec.  */
 void lex_writeTokens(DynArray_T oTokens)
 {
    size_t u;
@@ -34,7 +91,6 @@ void lex_writeTokens(DynArray_T oTokens)
 }
 
 /* Free all of the tokens in oTokens. */
-
 void lex_freeTokens(DynArray_T oTokens)
 {
    size_t u;
@@ -55,39 +111,38 @@ void lex_freeTokens(DynArray_T oTokens)
 
 /* Create and return a token whose type is eTokenType and whose
    value consists of string pcValue.  The caller owns the token. */
-
 static struct Token *lex_newToken(enum TokenType eTokenType,
                        char *pcValue)
 {
    struct Token *psToken;
-
+   const char *pcPgmName;
+   
    assert(pcValue != NULL);
 
+   pcPgmName = getPgmName();
+   
    psToken = (struct Token*)malloc(sizeof(struct Token));
    if (psToken == NULL)
-   {
-      fprintf(stderr, "insufficient memory\n");
-      exit(EXIT_FAILURE);
-   }
+   {perror(pcPgmName); exit(EXIT_FAILURE);}
+
    psToken->eType = eTokenType;
    psToken->pcValue = (char*)malloc(strlen(pcValue) + 1);
    if (psToken->pcValue == NULL)
-   {
-      fprintf(stderr, "insufficient memory\n");
-      exit(EXIT_FAILURE);
-   }
+   { perror(pcPgmName); exit(EXIT_FAILURE);}
+   
    strcpy(psToken->pcValue, pcValue);
 
    return psToken;
 }
 
-
 /* add a special token using the char c to oTokens */
-static void addSpecialToken(char c, DynArray_T oTokens)
+static void lex_addSpecialToken(char c, DynArray_T oTokens)
 {
    char pcBuffer[2];
    struct Token *psToken;
    int iSuccessful;
+   const char *pcPgmName;
+   pcPgmName = getPgmName();
    
    pcBuffer[0] = c;
    pcBuffer[1] = '\0';
@@ -95,26 +150,29 @@ static void addSpecialToken(char c, DynArray_T oTokens)
    iSuccessful = DynArray_add(oTokens, psToken);
    if (! iSuccessful)
    {
-      fprintf(stderr, "insufficient memory\n");
+      fprintf(stderr, "%s: insufficient memory\n", pcPgmName);
       exit(EXIT_FAILURE);
    }
 }
 
-
-/*  add an ordinary token to tokens using pcBuffer */
-static void addOrdinaryToken(char *pcBuffer,
+/*  add an ordinary token to oTokens using pcBuffer. takes uBufferIndex
+    also which is needed to properly create the token  */
+static void lex_addOrdinaryToken(char *pcBuffer,
                       size_t uBufferIndex,
                       DynArray_T oTokens)
 {
    struct Token *psToken;
    int iSuccessful;
-   
+   const char *pcPgmName;
+   pcPgmName = getPgmName();
+
+   assert(pcBuffer != NULL);
    pcBuffer[uBufferIndex] = '\0';
    psToken = lex_newToken(TOKEN_ORDINARY, pcBuffer);
    iSuccessful = DynArray_add(oTokens, psToken);
    if (! iSuccessful)
    {
-      fprintf(stderr, "insufficient memory\n");
+      fprintf(stderr, "%s: insufficient memory\n", pcPgmName);
       exit(EXIT_FAILURE);
    }
 }
@@ -138,14 +196,13 @@ DynArray_T lex_lexLine(const char *pcLine)
    char *pcBuffer;
 
    /* An index into the buffer. */
-   int uBufferIndex = 0;
+   size_t uBufferIndex = 0;
 
    char c;
    
-   char *pcPgmName = getPgmName();
+   const char *pcPgmName = getPgmName();
    
    DynArray_T oTokens;
-
 
    assert(pcLine != NULL);
 
@@ -153,7 +210,7 @@ DynArray_T lex_lexLine(const char *pcLine)
    oTokens = DynArray_new(0);
    if (oTokens == NULL)
    {
-      fprintf(stderr, "insufficient memory\n");
+      fprintf(stderr, "%s: insufficient memory\n", pcPgmName);
       exit(EXIT_FAILURE);
    }
    /* Allocate memory for a buffer that is large enough to store the
@@ -161,7 +218,7 @@ DynArray_T lex_lexLine(const char *pcLine)
    pcBuffer = (char*)malloc(strlen(pcLine) + 1);
    if (pcBuffer == NULL)
    {
-      fprintf(stderr, "insufficient memory\n");
+      fprintf(stderr, "%s: insufficient memory\n", pcPgmName);
       exit(EXIT_FAILURE);
    }
 
@@ -179,7 +236,7 @@ DynArray_T lex_lexLine(const char *pcLine)
             }
             else if ((c == '>') || (c == '<'))
             {
-               addSpecialToken(c, oTokens);
+               lex_addSpecialToken(c, oTokens);
                eState = STATE_SPECIAL;
             }
             else if (c == '\"')
@@ -229,14 +286,14 @@ DynArray_T lex_lexLine(const char *pcLine)
          case STATE_ESCAPE_OUT:
             if (c == '\0')
             {
-               addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
+               lex_addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
                uBufferIndex = 0;
                free(pcBuffer);
                return oTokens;
             }
             else if ((c == '>') || (c == '<'))
             {
-               addSpecialToken(c, oTokens);
+               lex_addSpecialToken(c, oTokens);
                eState = STATE_SPECIAL;
             }
             else if (c == '\"')
@@ -245,7 +302,7 @@ DynArray_T lex_lexLine(const char *pcLine)
             }
             else if (isspace(c))
             {
-               addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
+               lex_addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
                uBufferIndex = 0;
                eState = STATE_START;
             }
@@ -263,7 +320,7 @@ DynArray_T lex_lexLine(const char *pcLine)
             }
             else if ((c == '>') || (c == '<'))
             {
-               addSpecialToken(c, oTokens);
+               lex_addSpecialToken(c, oTokens);
                uBufferIndex = 0;
                eState = STATE_SPECIAL;
             }
@@ -285,15 +342,15 @@ DynArray_T lex_lexLine(const char *pcLine)
          case STATE_ORDINARY:
             if (c == '\0')
             {
-               addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
+               lex_addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
                uBufferIndex = 0;
                free(pcBuffer);
                return oTokens;
             }
             else if ((c == '>') || (c == '<'))
             {
-               addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
-               addSpecialToken(c, oTokens);
+               lex_addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
+               lex_addSpecialToken(c, oTokens);
                uBufferIndex = 0;               
                eState = STATE_SPECIAL;
             }
@@ -303,7 +360,7 @@ DynArray_T lex_lexLine(const char *pcLine)
             }
             else if (isspace(c))
             {
-               addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
+               lex_addOrdinaryToken(pcBuffer, uBufferIndex, oTokens);
                uBufferIndex = 0;
                eState = STATE_START;
             }
@@ -319,4 +376,3 @@ DynArray_T lex_lexLine(const char *pcLine)
       }
    }
 }
-

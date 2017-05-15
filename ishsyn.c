@@ -3,6 +3,7 @@
 /* Author: Nate Wilson                                                */
 /*--------------------------------------------------------------------*/
 
+#include "ish.h"
 #include "command.h"
 #include "lex.h"
 #include "dynarray.h"
@@ -15,64 +16,10 @@
 /* program name, filled in by main */
 static const char *pcPgmName;
 
-const char *getPgmName()
+const char *getPgmName(void)
 {
    return pcPgmName;
 }
-
-/* read in a line from psFile, then return that line in string form */
-static char *readLine(FILE *psFile)
-{
-   enum {INITIAL_LINE_LENGTH = 2};
-   enum {GROWTH_FACTOR = 2};
-
-   size_t uLineLength = 0;
-   size_t uPhysLineLength = INITIAL_LINE_LENGTH;
-   char *pcLine;
-   int iChar;
-
-   assert(psFile != NULL);
-
-   /* If no lines remain, return NULL. */
-   if (feof(psFile))
-      return NULL;
-   iChar = fgetc(psFile);
-   if (iChar == EOF)
-      return NULL;
-
-   /* Allocate memory for the string. */
-   pcLine = (char*)malloc(uPhysLineLength);
-   if (pcLine == NULL)
-   {perror(pcPgmName); exit(EXIT_FAILURE);}
-
-   /* Read characters into the string. */
-   while ((iChar != '\n') && (iChar != EOF))
-   {
-      if (uLineLength == uPhysLineLength)
-      {
-         uPhysLineLength *= GROWTH_FACTOR;
-         pcLine = (char*)realloc(pcLine, uPhysLineLength);
-         if (pcLine == NULL)
-         {perror(pcPgmName); exit(EXIT_FAILURE);}
-      }
-      pcLine[uLineLength] = (char)iChar;
-      uLineLength++;
-      iChar = fgetc(psFile);
-   }
-
-   /* Append a null character to the string. */
-   if (uLineLength == uPhysLineLength)
-   {
-      uPhysLineLength++;
-      pcLine = (char*)realloc(pcLine, uPhysLineLength);
-      if (pcLine == NULL)
-      {perror(pcPgmName); exit(EXIT_FAILURE);}
-   }
-   pcLine[uLineLength] = '\0';
-
-   return pcLine;
-}
-
 /* implements the syntactic analyzer, returns 0 on success
    argv array is a string array of command line args
    argc is the count of arguments in argv array */
@@ -85,7 +32,7 @@ int main(int argc, char *argv[])
 
    pcPgmName = argv[0];
    printf("%% ");
-   while ((pcLine = readLine(stdin)) != NULL)
+   while ((pcLine = lex_readLine(stdin)) != NULL)
    {
       printf("%s\n", pcLine);
       iRet = fflush(stdout);
