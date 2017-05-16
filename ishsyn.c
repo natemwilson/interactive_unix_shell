@@ -3,6 +3,7 @@
 /* Author: Nate Wilson                                                */
 /*--------------------------------------------------------------------*/
 
+#include "token.h"
 #include "ish.h"
 #include "command.h"
 #include "lex.h"

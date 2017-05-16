@@ -5,6 +5,7 @@
   about the command's name, arguments and input/output redirection
   --------------------------------------------------------------------*/
 
+#include "token.h"
 #include "command.h"
 #include "ish.h"
 #include "dynarray.h"
@@ -56,9 +57,7 @@ DynArray_T Command_getTokens(Command_T oCommand)
 void Command_freeCommand(Command_T oCommand)
 {
    assert(oCommand != NULL);
-   /* should these do if not null checks ? */
    /* from free man page: If ptr is NULL, no operation is performed. */
-   /* so no! */
    free(oCommand->pcStdin);
    free(oCommand->pcStdout);
    free(oCommand);
@@ -71,7 +70,7 @@ void Command_writeCommand(Command_T oCommand)
 {
    size_t uLength; /* length of cmd token array */
    size_t uIndex; /* index used for looping*/
-   struct Token *psToken; /* current token, multiple uses*/
+   Token_T oToken; /* current token, multiple uses*/
    
    assert(oCommand != NULL);
    
@@ -80,14 +79,14 @@ void Command_writeCommand(Command_T oCommand)
    assert(uLength > 0);
 
    /* print command name */
-   psToken = DynArray_get(oCommand->oTokens, 0);
-   printf("Command name: %s\n", psToken->pcValue);
+   oToken = DynArray_get(oCommand->oTokens, 0);
+   printf("Command name: %s\n", Token_getValue(oToken));
 
    /* print command args */
    for (uIndex = 1; uIndex < uLength; uIndex++)
    {
-      psToken = DynArray_get(oCommand->oTokens, uIndex);
-      printf("Command arg: %s\n", psToken->pcValue);
+      oToken = DynArray_get(oCommand->oTokens, uIndex);
+      printf("Command arg: %s\n", Token_getValue(oToken));
    }
    
    /* print stdin/stdout */
@@ -104,10 +103,8 @@ Command_T Command_createCommand(DynArray_T oTokens)
 {
    size_t uIndex; /* used for looping */
    size_t uLength; /* length of cmd token array */
-   size_t uStdinTokenCount; /* n stdin tokens */
-   size_t uStdoutTokenCount; /* n stdout tokens */
-   struct Token *psToken; /* token pointer  */
-   struct Token *psNextToken; /* another token pointer */
+   size_t uStdinTokenCount, uStdoutTokenCount; /* n stdin/out tokens */
+   Token_T oToken, oNextToken; /* token pointers  */
    Command_T oCommand; /* command to create and return*/
    char *pcStdinReferenceString  = "<"; /* used for string comparing */
    const char *pcPgmName; /* the program name */
@@ -115,25 +112,22 @@ Command_T Command_createCommand(DynArray_T oTokens)
    assert(oTokens != NULL);
 
    pcPgmName = getPgmName();
-   
    /* account for the empty cmd case, silently fail */
    uLength = DynArray_getLength(oTokens);
    if (uLength == 0) return NULL;
-   
    /*  It is an error for the DynArray object to begin with a 
        special  token. */
-   psToken = DynArray_get(oTokens, 0);
-   if (psToken->eType == TOKEN_SPECIAL)
+   oToken = DynArray_get(oTokens, 0);
+   if (Token_isSpecial(oToken))
    {
       fprintf(stderr, "%s: missing command name\n", pcPgmName);
       return NULL;
    }
-
    /* it is also an error for a DynArray to end with a special token*/
-   psToken = DynArray_get(oTokens, uLength - 1);
-   if (psToken->eType == TOKEN_SPECIAL)
+   oToken = DynArray_get(oTokens, uLength - 1);
+   if (Token_isSpecial(oToken))
    {
-      if (strcmp(psToken->pcValue, pcStdinReferenceString) == 0)
+      if (strcmp(Token_getValue(oToken), pcStdinReferenceString) == 0)
       {  
          fprintf(stderr,
                  "%s: standard input redirection without file name\n",
@@ -148,28 +142,24 @@ Command_T Command_createCommand(DynArray_T oTokens)
          return NULL;
       }  
    }
-
    /* past initial error checking, now build the command */
    /* allocate command struct, set address to oCommand*/
    oCommand = (struct Command*)malloc(sizeof(struct Command));
    if (oCommand == NULL)
    {perror(pcPgmName); exit(EXIT_FAILURE);}
-
    /* set tokens array */
    oCommand->oTokens = oTokens;
    /* initialize stdin and out strings*/
    oCommand->pcStdin = NULL;
    oCommand->pcStdout = NULL;
-
    /* multiple redirection check */
    uStdinTokenCount = 0;
    uStdoutTokenCount = 0;
-   
    /* now check for only one std in and one stdout token */
    for (uIndex = 0; uIndex < uLength; uIndex++) {
-      psToken = DynArray_get(oCommand->oTokens, uIndex);
-      if (psToken->eType == TOKEN_SPECIAL) {
-         if (strcmp(psToken->pcValue, pcStdinReferenceString) == 0)
+      oToken = DynArray_get(oCommand->oTokens, uIndex);
+      if (Token_isSpecial(oToken)) {
+         if (strcmp(Token_getValue(oToken), pcStdinReferenceString) == 0)
             uStdinTokenCount++;
          else
             uStdoutTokenCount++;
@@ -193,17 +183,19 @@ Command_T Command_createCommand(DynArray_T oTokens)
    /* command creation loop */
    /* we can stop checking at length - 1 because we checked the end 
       of the array above */
+   /* for each element, if special, check special type,allocate
+      for proper string size and set accordingly */
    for (uIndex = 0; uIndex < uLength-1; uIndex++)
-   {    /* for each element, if special, check special type,allocate 
-           for proper string size and set accordingly */
-      psToken = DynArray_get(oCommand->oTokens, uIndex);
-      if (psToken->eType == TOKEN_SPECIAL)
+   {  
+      oToken = DynArray_get(oCommand->oTokens, uIndex);
+      if (Token_isSpecial(oToken))
       {  /*if special get the next token, the redirect string*/
-         psNextToken = DynArray_get(oCommand->oTokens, uIndex+1);
+         oNextToken = DynArray_get(oCommand->oTokens, uIndex+1);
          /* do not allow a special token immediately after a special token */
-         if (psNextToken->eType == TOKEN_SPECIAL)
+         if (Token_isSpecial(oNextToken))
          {   /* if stdin  */
-            if (strcmp(psToken->pcValue, pcStdinReferenceString) == 0) {
+            if (strcmp(Token_getValue(oToken),
+                       pcStdinReferenceString) == 0) {
                fprintf(stderr,
                    "%s: standard output redirection without file name",
                        pcPgmName);
@@ -217,36 +209,34 @@ Command_T Command_createCommand(DynArray_T oTokens)
                return NULL; }
          }
          /* if curr special token is stdin, set stdin in of command */
-         if (strcmp(psToken->pcValue, pcStdinReferenceString) == 0)
+         if (strcmp(Token_getValue(oToken), pcStdinReferenceString) == 0)
          {         
             oCommand->pcStdin =
-               (char*)malloc(strlen(psNextToken->pcValue) + 1);
+               (char*)malloc(strlen(Token_getValue(oNextToken)) + 1);
             if (oCommand->pcStdin == NULL) {
                perror(pcPgmName);
                free(oCommand);
                exit(EXIT_FAILURE);
             }
-            strcpy(oCommand->pcStdin, psNextToken->pcValue);
+            strcpy(oCommand->pcStdin, Token_getValue(oNextToken));
          }
          else /*else it is stdout*/
          {
             oCommand->pcStdout =
-               (char*)malloc(strlen(psNextToken->pcValue) + 1);
+               (char*)malloc(strlen(Token_getValue(oNextToken)) + 1);
             if (oCommand->pcStdout == NULL) {
                perror(pcPgmName);
                free(oCommand);
                exit(EXIT_FAILURE);
             }
-            strcpy(oCommand->pcStdout, psNextToken->pcValue);
+            strcpy(oCommand->pcStdout, Token_getValue(oNextToken));
          }
          /* remove the special token and the one following it */
          (void) DynArray_removeAt(oCommand->oTokens, uIndex);
          (void) DynArray_removeAt(oCommand->oTokens, uIndex);
          /* free those tokens and their internals */
-         free(psToken->pcValue);
-         free(psToken);
-         free(psNextToken->pcValue);
-         free(psNextToken);
+         Token_free(oToken);
+         Token_free(oNextToken);
          /* update loop parameters to reflect new structure */
          uLength = uLength - 2;
          uIndex = uIndex - 1;

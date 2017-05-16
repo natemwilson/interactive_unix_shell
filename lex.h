@@ -9,19 +9,6 @@
 #include <stdio.h>
 
 
-/* A Token object can be either special or ordinary. */
-enum TokenType {TOKEN_ORDINARY, TOKEN_SPECIAL};
-
-/* A Token is either special or ordinary, and is expressed as string. */
-struct Token
-{
-   /* The type of the token. */
-   enum TokenType eType;
-
-   /* The string which is the token's value. */
-   char *pcValue;
-};
-
 /* Write all tokens in oTokens in logical order to stdout.  */
 void lex_writeTokens(DynArray_T oTokens);
 

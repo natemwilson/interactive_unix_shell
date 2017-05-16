@@ -3,6 +3,7 @@
 /* Author: Nate Wilson                                                */
 /*--------------------------------------------------------------------*/
 
+#include "token.h"
 #include "lex.h"
 #include "ish.h"
 #include "dynarray.h"
@@ -74,7 +75,7 @@ void lex_writeTokens(DynArray_T oTokens)
 {
    size_t u;
    size_t uLength;
-   struct Token *psToken;
+   Token_T oToken;
 
    assert(oTokens != NULL);
 
@@ -82,11 +83,11 @@ void lex_writeTokens(DynArray_T oTokens)
 
    for (u = 0; u < uLength; u++)
    {
-      psToken = DynArray_get(oTokens, u);
-      if (psToken->eType == TOKEN_ORDINARY)
-         printf("Token: %s (ordinary)\n", psToken->pcValue);
+      oToken = DynArray_get(oTokens, u);
+      if (Token_isOrdinary(oToken))
+         printf("Token: %s (ordinary)\n", Token_getValue(oToken));
       else
-         printf("Token: %s (special)\n", psToken->pcValue);
+         printf("Token: %s (special)\n", Token_getValue(oToken));
    }
 }
 
@@ -95,7 +96,7 @@ void lex_freeTokens(DynArray_T oTokens)
 {
    size_t u;
    size_t uLength;
-   struct Token *psToken;
+   Token_T oToken;
 
    assert(oTokens != NULL);
 
@@ -103,51 +104,24 @@ void lex_freeTokens(DynArray_T oTokens)
 
    for (u = 0; u < uLength; u++)
    {
-      psToken = DynArray_get(oTokens, u);
-      free(psToken->pcValue);
-      free(psToken);
+      oToken = DynArray_get(oTokens, u);
+      Token_free(oToken);
    }
-}
-
-/* Create and return a token whose type is eTokenType and whose
-   value consists of string pcValue.  The caller owns the token. */
-static struct Token *lex_newToken(enum TokenType eTokenType,
-                       char *pcValue)
-{
-   struct Token *psToken;
-   const char *pcPgmName;
-   
-   assert(pcValue != NULL);
-
-   pcPgmName = getPgmName();
-   
-   psToken = (struct Token*)malloc(sizeof(struct Token));
-   if (psToken == NULL)
-   {perror(pcPgmName); exit(EXIT_FAILURE);}
-
-   psToken->eType = eTokenType;
-   psToken->pcValue = (char*)malloc(strlen(pcValue) + 1);
-   if (psToken->pcValue == NULL)
-   { perror(pcPgmName); exit(EXIT_FAILURE);}
-   
-   strcpy(psToken->pcValue, pcValue);
-
-   return psToken;
 }
 
 /* add a special token using the char c to oTokens */
 static void lex_addSpecialToken(char c, DynArray_T oTokens)
 {
    char pcBuffer[2];
-   struct Token *psToken;
+   Token_T oToken;
    int iSuccessful;
    const char *pcPgmName;
    pcPgmName = getPgmName();
    
    pcBuffer[0] = c;
    pcBuffer[1] = '\0';
-   psToken = lex_newToken(TOKEN_SPECIAL, pcBuffer);
-   iSuccessful = DynArray_add(oTokens, psToken);
+   oToken = Token_new(TOKEN_SPECIAL, pcBuffer);
+   iSuccessful = DynArray_add(oTokens, oToken);
    if (! iSuccessful)
    {
       fprintf(stderr, "%s: insufficient memory\n", pcPgmName);
@@ -161,15 +135,14 @@ static void lex_addOrdinaryToken(char *pcBuffer,
                       size_t uBufferIndex,
                       DynArray_T oTokens)
 {
-   struct Token *psToken;
+   Token_T oToken;
    int iSuccessful;
    const char *pcPgmName;
    pcPgmName = getPgmName();
-
    assert(pcBuffer != NULL);
    pcBuffer[uBufferIndex] = '\0';
-   psToken = lex_newToken(TOKEN_ORDINARY, pcBuffer);
-   iSuccessful = DynArray_add(oTokens, psToken);
+   oToken = Token_new(TOKEN_ORDINARY, pcBuffer);
+   iSuccessful = DynArray_add(oTokens, oToken);
    if (! iSuccessful)
    {
       fprintf(stderr, "%s: insufficient memory\n", pcPgmName);

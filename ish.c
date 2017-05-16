@@ -3,6 +3,7 @@
 /* Author: Nate Wilson                                                */
 /*--------------------------------------------------------------------*/
 
+#include "token.h"
 #include "ish.h"
 #include "command.h"
 #include "lex.h"
@@ -33,12 +34,13 @@ enum {FALSE, TRUE};
    oCommand name and args properly into the array, adding a null 
    terminator to the end, and allocating along the way
  Returns pointer to allocated apcArgv array or a NULL if command is empty*/
-static char **ish_allocateAndFillArgvArray(char *apcArgv[], Command_T oCommand)
+static char **ish_allocateAndFillArgvArray(Command_T oCommand)
 {
    size_t uLength;
    size_t uIndex;
-   struct Token *psToken;
-
+   Token_T oToken;
+   char **apcArgv;
+   
    uLength = DynArray_getLength(Command_getTokens(oCommand));
 
    apcArgv = malloc(sizeof(char *) * (uLength+1));
@@ -47,13 +49,13 @@ static char **ish_allocateAndFillArgvArray(char *apcArgv[], Command_T oCommand)
    
    for (uIndex = 0; uIndex < uLength; uIndex++)
    {
-      psToken = DynArray_get(Command_getTokens(oCommand), uIndex);
+      oToken = DynArray_get(Command_getTokens(oCommand), uIndex);
 
-      apcArgv[uIndex] = malloc(strlen(psToken->pcValue) + 1);
+      apcArgv[uIndex] = malloc(strlen(Token_getValue(oToken)) + 1);
       if (apcArgv[uIndex] == NULL)
       {perror(pcPgmName); exit(EXIT_FAILURE);}
       
-      strcpy(apcArgv[uIndex], psToken->pcValue);
+      strcpy(apcArgv[uIndex], Token_getValue(oToken));
    }
 
    /* add null terminator according to execvp spec */
@@ -66,9 +68,10 @@ static char **ish_allocateAndFillArgvArray(char *apcArgv[], Command_T oCommand)
 /* free memory allocated associated with the apcArgv string array */
 static void ish_freeArgvArray(char *apcArgv[])
 {
-   /* no need to assert things not null because 
-      freeing something null does nothing */
    size_t uIndex = 0;
+   
+   assert(apcArgv!=NULL);
+   
    while (apcArgv[uIndex] != NULL)
    {
       free(apcArgv[uIndex]);
@@ -82,16 +85,16 @@ static void ish_freeArgvArray(char *apcArgv[])
 static int ish_isBuiltIn(Command_T oCommand)
 {
    DynArray_T oTokens;
-   struct Token *psToken;
+   Token_T oToken;
    
    oTokens = Command_getTokens(oCommand);
 
-   psToken = DynArray_get(oTokens, 0);
+   oToken = DynArray_get(oTokens, 0);
 
-   if ((strcmp(psToken->pcValue, "setenv")   == 0) ||
-       (strcmp(psToken->pcValue, "unsetenv") == 0) ||
-       (strcmp(psToken->pcValue, "cd")       == 0) ||
-       (strcmp(psToken->pcValue, "exit")     == 0))
+   if ((strcmp(Token_getValue(oToken), "setenv")   == 0) ||
+       (strcmp(Token_getValue(oToken), "unsetenv") == 0) ||
+       (strcmp(Token_getValue(oToken), "cd")       == 0) ||
+       (strcmp(Token_getValue(oToken), "exit")     == 0))
       return TRUE;
    else
       return FALSE;
@@ -104,7 +107,8 @@ static void ish_handleRedirection(Command_T oCommand)
    char *pcStdout;
    int iFd;
    int iRet;
-   
+
+   /* get input/output redirection strings */
    pcStdin = Command_getStdin(oCommand);
    pcStdout = Command_getStdout(oCommand);
 
@@ -113,8 +117,10 @@ static void ish_handleRedirection(Command_T oCommand)
    {
       /* The permissions of the newly-created file. */
       enum {PERMISSIONS = 0600};
+      /* create the file/overwrite if it exists */
       iFd = creat(pcStdout, PERMISSIONS);
       if (iFd == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+      /* close, dup, close pattern redirects output */
       iRet = close(1);
       if (iRet == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
       iRet = dup(iFd);
@@ -126,8 +132,10 @@ static void ish_handleRedirection(Command_T oCommand)
    /* handle stdin next */
    if (pcStdin != NULL)
    {
+      /* open a file for reading */
       iFd = open(pcStdin, O_RDONLY);
       if (iFd == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
+      /* close dup close pattern redirects input */
       iRet = close(0);
       if (iRet == -1) {perror(pcPgmName); exit(EXIT_FAILURE); }
       iRet = dup(iFd);
@@ -144,9 +152,9 @@ static void ish_handleBuiltIn(Command_T oCommand, char *pcLine)
 {
    DynArray_T oTokens;
    size_t uLength;
-   struct Token *psCmdName;
-   struct Token *psCmdArg1;
-   struct Token *psCmdArg2;
+   Token_T oCmdName;
+   Token_T oCmdArg1;
+   Token_T oCmdArg2;
    char *pcHome;
    int iRet;
 
@@ -154,11 +162,11 @@ static void ish_handleBuiltIn(Command_T oCommand, char *pcLine)
    assert(ish_isBuiltIn(oCommand)); 
    
    oTokens = Command_getTokens(oCommand);
-   psCmdName = DynArray_get(oTokens, 0);
+   oCmdName = DynArray_get(oTokens, 0);
    uLength = DynArray_getLength(oTokens);
 
    /* handle exit */
-   if (strcmp(psCmdName->pcValue, "exit") == 0)
+   if (strcmp(Token_getValue(oCmdName), "exit") == 0)
    {
       if (uLength > 1)
       {
@@ -174,7 +182,7 @@ static void ish_handleBuiltIn(Command_T oCommand, char *pcLine)
    }
 
    /* handle setenv */
-   if (strcmp(psCmdName->pcValue, "setenv") == 0)
+   if (strcmp(Token_getValue(oCmdName), "setenv") == 0)
    {
       /* error for setenv to have 0 or more than 2 args. */
       if (uLength == 1) /* % setenv */
@@ -189,21 +197,21 @@ static void ish_handleBuiltIn(Command_T oCommand, char *pcLine)
       }
       if (uLength == 3) /* % setenv a b */
       {
-         psCmdArg1 = DynArray_get(oTokens, 1);
-         psCmdArg2 = DynArray_get(oTokens, 2);
-         setenv(psCmdArg1->pcValue,
-                psCmdArg2->pcValue, TRUE);
+         oCmdArg1 = DynArray_get(oTokens, 1);
+         oCmdArg2 = DynArray_get(oTokens, 2);
+         setenv(Token_getValue(oCmdArg1),
+                Token_getValue(oCmdArg2), TRUE);
          return;
       }
       if (uLength == 2) /* % setenv a -- default sets to empty string */
       {
-         psCmdArg1 = DynArray_get(oTokens, 1);
-         setenv(psCmdArg1->pcValue, "", TRUE);
+         oCmdArg1 = DynArray_get(oTokens, 1);
+         setenv(Token_getValue(oCmdArg1), "", TRUE);
          return;
       }
    }
    /* handle unsetenv */
-   if (strcmp(psCmdName->pcValue, "unsetenv") == 0)
+   if (strcmp(Token_getValue(oCmdName), "unsetenv") == 0)
    {
       /* It is an error for an unsetenv command to have zero command-line arguments or more than one command-line argument.*/
       if (uLength == 1)
@@ -218,13 +226,13 @@ static void ish_handleBuiltIn(Command_T oCommand, char *pcLine)
       }
       if (uLength == 2)
       {
-         psCmdArg1 = DynArray_get(oTokens, 1);
-         unsetenv(psCmdArg1->pcValue);
+         oCmdArg1 = DynArray_get(oTokens, 1);
+         unsetenv(Token_getValue(oCmdArg1));
          return;
       }
    }
    /* handle cd */
-   if (strcmp(psCmdName->pcValue, "cd") == 0)
+   if (strcmp(Token_getValue(oCmdName), "cd") == 0)
    {
       /*  It is an error for a cd to have more than one argument. */
       if (uLength > 2)
@@ -244,13 +252,19 @@ static void ish_handleBuiltIn(Command_T oCommand, char *pcLine)
          {
             iRet = chdir(pcHome);
             /*should i do some error checking here? */
+            if (iRet == -1)
+               fprintf(stderr, "%s: No such file or directory\n",
+                       pcPgmName);
             return;
          }
       }
       if (uLength == 2) /* % cd path/to/wherever */
       {
-         psCmdArg1 = DynArray_get(oTokens, 1);
-         iRet = chdir(psCmdArg1->pcValue);
+         oCmdArg1 = DynArray_get(oTokens, 1);
+         iRet = chdir(Token_getValue(oCmdArg1));
+         if (iRet == -1)
+            fprintf(stderr, "%s: No such file or directory\n",
+                    pcPgmName);
          return;
       }
    }
@@ -271,58 +285,40 @@ int main(int argc, char *argv[])
    pcPgmName = argv[0];
    printf("%% ");
    while ((pcLine = lex_readLine(stdin)) != NULL)
-   {
-      printf("%s\n", pcLine);
+   {  printf("%s\n", pcLine);
       iRet = fflush(stdout);
       if (iRet == EOF)
       {perror(pcPgmName); exit(EXIT_FAILURE);}
       oTokens = lex_lexLine(pcLine);
-      /* do we have a valid token array? */
-      if (oTokens != NULL)
-      {
-         oCommand = Command_createCommand(oTokens);
-         /* do we have a valid command */
-         if (oCommand != NULL)
-         {
-            /* is the command setenv, unsetenv, cd or exit? */
-            if (ish_isBuiltIn(oCommand))
+      if (oTokens != NULL) /* do we have a valid token array? */
+      {  oCommand = Command_createCommand(oTokens);
+         if (oCommand != NULL) /* do we have a valid command */
+         {  
+            if (ish_isBuiltIn(oCommand)) /* is cmd a builtin?*/
                ish_handleBuiltIn(oCommand, pcLine);
             else /* if the command is NOT a builtin */
             {
-               apcArgv = ish_allocateAndFillArgvArray(apcArgv,
-                                                      oCommand);
+               apcArgv = ish_allocateAndFillArgvArray(oCommand);
                iPid = fork();
-               if (iPid == 0)
-               {
-                  /* handle redirection here */
+               if (iPid == 0) /* child process */
+               {  /* handle redirection here */
                   if ((Command_getStdin(oCommand) != NULL) ||
                       (Command_getStdout(oCommand) != NULL))
                      ish_handleRedirection(oCommand);
-                  /* this causes a warning, you should do error checking \
-                     below depending on exactly how to handle the other
-                     errors above */
-
                   execvp(apcArgv[0], apcArgv);
                   perror(pcPgmName);
-
-                  exit(EXIT_FAILURE);
-               }
+                  exit(EXIT_FAILURE); }
                iPid = wait(NULL);
                if (iPid == -1) {perror(argv[0]); exit(EXIT_FAILURE); }
-               /* free the argv array here */
-               ish_freeArgvArray(apcArgv);
+               ish_freeArgvArray(apcArgv); /* free the argv array */
             }
-            /* free commad struct and internals */
-            Command_freeCommand(oCommand);
+            Command_freeCommand(oCommand);/*free cmd struct & intrnls */
          }
-         /* free each token in dynarray tokens */
-         lex_freeTokens(oTokens);
-         /* free dynarray */
-         DynArray_free(oTokens);
+         lex_freeTokens(oTokens); /* free each token in oTokens */
+         DynArray_free(oTokens); /* free dynarray struct */
       }
       free(pcLine);
       printf("%% ");
    }
    printf("\n");
-   return 0;
-}
+   return 0;}
